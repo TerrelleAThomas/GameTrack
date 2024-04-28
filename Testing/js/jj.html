@@ -1,0 +1,204 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Chat</title>
+    <!-- Bootstrap CSS -->
+    <link href="https://stackpath.bootstrapcdn.com/bootstrap/4.5.2/css/bootstrap.min.css" rel="stylesheet">
+    <style>
+        .sender-message {
+            color: green; /* Set color for sender messages */
+        }
+
+        .receiver-message {
+            color: blue; /* Set color for receiver messages */
+        }
+    </style>
+    <!-- Add Firebase SDK -->
+    <script src="https://www.gstatic.com/firebasejs/8.2.0/firebase-app.js"></script>
+    <script src="https://www.gstatic.com/firebasejs/8.2.0/firebase-firestore.js"></script>
+    <script src="https://www.gstatic.com/firebasejs/8.2.0/firebase-auth.js"></script>
+    <script>
+        // Initialize Firebase
+        const firebaseConfig = {
+            apiKey: "AIzaSyD18a6bP6Ec0QCsLm5bl04prN_WAchA4Is",
+            authDomain: "gamtrack-3a2f2.firebaseapp.com",
+            projectId: "gamtrack-3a2f2",
+            storageBucket: "gamtrack-3a2f2.appspot.com",
+            messagingSenderId: "492662811532",
+            appId: "1:492662811532:web:4e59f354ffbc43eee384a9",
+            measurementId: "G-5VTT1HQLJ1"
+        };
+
+        firebase.initializeApp(firebaseConfig);
+
+        const db = firebase.firestore();
+        const auth = firebase.auth();
+
+        // Function to send a message
+        function sendMessage() {
+            const messageInput = document.getElementById('messageInput');
+            const receiverInput = document.getElementById('receiverInput');
+            const message = messageInput.value.trim();
+            const receiverUsername = receiverInput.value.trim();
+
+            if (message !== '' && receiverUsername !== '') {
+                const currentUser = auth.currentUser;
+                if (!currentUser) {
+                    console.log("No user signed in");
+                    return;
+                }
+
+                const currentUserUsername = currentUser.displayName;
+
+                // Retrieve the sender's UID
+                db.collection('User')
+                    .where('username', '==', currentUserUsername)
+                    .get()
+                    .then(senderSnapshot => {
+                        if (senderSnapshot.empty) {
+                            console.log("Sender not found");
+                            return;
+                        }
+
+                        const senderUID = senderSnapshot.docs[0].id;
+
+                        // Retrieve the receiver's UID
+                        db.collection('User')
+                            .where('username', '==', receiverUsername)
+                            .get()
+                            .then(receiverSnapshot => {
+                                if (receiverSnapshot.empty) {
+                                    console.log("Receiver not found");
+                                    return;
+                                }
+
+                                const receiverUID = receiverSnapshot.docs[0].id;
+                                const messageId = db.collection('DirectMessage').doc().id;
+                                const createdAt = firebase.firestore.FieldValue.serverTimestamp();
+
+                                db.collection('DirectMessage').doc(messageId).set({
+                                    messageId: messageId,
+                                    content: message,
+                                    receiverUID: receiverUID,
+                                    senderUID: senderUID,
+                                    createdAt: createdAt
+                                })
+                                    .then(() => {
+                                        console.log("Message sent successfully");
+                                        messageInput.value = '';
+                                        receiverInput.value = '';
+                                    })
+                                    .catch(error => {
+                                        console.error("Error sending message: ", error);
+                                    });
+                            })
+                            .catch(error => {
+                                console.error("Error retrieving receiver information:", error);
+                            });
+                    })
+                    .catch(error => {
+                        console.error("Error retrieving sender information:", error);
+                    });
+            } else {
+                console.log("Message or receiver username is empty");
+            }
+        }
+
+        // Function to display messages
+        function displayMessages() {
+            const chatList = document.getElementById('chatList');
+
+            const currentUser = auth.currentUser;
+            if (!currentUser) {
+                console.log("No user signed in");
+                return;
+            }
+
+            const currentUserUsername = currentUser.displayName;
+
+            // Retrieve the sender's UID
+            db.collection('User')
+                .where('username', '==', currentUserUsername)
+                .get()
+                .then(senderSnapshot => {
+                    if (senderSnapshot.empty) {
+                        console.log("Sender not found");
+                        return;
+                    }
+
+                    const senderUID = senderSnapshot.docs[0].id;
+
+                    // Retrieve messages sent by the current user
+                    db.collection('DirectMessage')
+                        .where('senderUID', '==', senderUID)
+                        .orderBy('createdAt')
+                        .onSnapshot(snapshot => {
+                            chatList.innerHTML = '';
+                            snapshot.forEach(doc => {
+                                const message = doc.data();
+                                const messageElement = document.createElement('li');
+                                messageElement.textContent = `To ${message.receiverUsername}: ${message.content}`;
+                                messageElement.classList.add('list-group-item');
+                                messageElement.classList.add('sender-message'); // Add class for sender messages
+                                chatList.appendChild(messageElement);
+                            });
+                        });
+                })
+                .catch(error => {
+                    console.error("Error retrieving sender information:", error);
+                });
+
+            // Retrieve the receiver's UID
+            db.collection('User')
+                .where('username', '==', currentUserUsername)
+                .get()
+                .then(receiverSnapshot => {
+                    if (receiverSnapshot.empty) {
+                        console.log("Receiver not found");
+                        return;
+                    }
+
+                    const receiverUID = receiverSnapshot.docs[0].id;
+
+                    // Retrieve messages received by the current user
+                    db.collection('DirectMessage')
+                        .where('receiverUID', '==', receiverUID)
+                        .orderBy('createdAt')
+                        .onSnapshot(snapshot => {
+                            snapshot.forEach(doc => {
+                                const message = doc.data();
+                                const messageElement = document.createElement('li');
+                                messageElement.textContent = `${message.senderUsername}: ${message.content}`;
+                                messageElement.classList.add('list-group-item');
+                                messageElement.classList.add('receiver-message'); // Add class for receiver messages
+                                chatList.appendChild(messageElement);
+                            });
+                        });
+                })
+                .catch(error => {
+                    console.error("Error retrieving receiver information:", error);
+                });
+        }
+
+        // Display messages when the page loads
+        window.onload = () => {
+            displayMessages();
+        };
+    </script>
+</head>
+<body>
+<div class="container mt-5">
+    <h1 class="mb-4">Chat</h1>
+    <ul id="chatList" class="list-group mb-4"></ul>
+    <div class="input-group mb-3">
+        <input type="text" id="receiverInput" class="form-control" placeholder="Receiver's username...">
+        <input type="text" id="messageInput" class="form-control" placeholder="Type your message...">
+        <div class="input-group-append">
+            <button onclick="sendMessage()" class="btn btn-primary">Send</button>
+        </div>
+    </div>
+</div>
+</body>
+</html>
